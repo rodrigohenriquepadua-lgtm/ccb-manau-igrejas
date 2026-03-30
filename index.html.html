@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapa CCB Manaus</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+<style>
+    body { margin: 0; font-family: Arial; }
+    #map { height: 100vh; }
+
+    .btn-rota {
+        display: inline-block;
+        margin-top: 8px;
+        padding: 6px 10px;
+        background: #007bff;
+        color: white;
+        text-decoration: none;
+        border-radius: 5px;
+        font-size: 13px;
+    }
+
+    /* Painel superior direito */
+    .painel {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        width: 260px;
+        background: white;
+        padding: 12px;
+        border-radius: 8px;
+        box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        z-index: 1000;
+        font-size: 14px;
+        min-width: 250px;
+    }
+
+    /* Painel inferior */
+    .painel-bottom {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        z-index: 1000;
+    }
+
+    button {
+        padding: 10px 15px;
+        background: #28a745;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+
+</style>
+</head>
+
+<body>
+
+<div id="map"></div>
+
+<div class="painel" id="painelCulto">
+    <b>📅 Dias de Culto</b><br>
+    Clique em uma igreja
+</div>
+
+<div class="painel-bottom">
+    <button onclick="igrejaMaisProxima()">⛪ Igreja mais próxima</button>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+
+const map = L.map('map').setView([-3.05, -60.0], 13);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap'
+}).addTo(map);
+
+// Ícones
+const iconeAzul = L.icon({
+    iconUrl: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+    iconSize: [32, 32]
+});
+
+const iconeGrande = L.icon({
+    iconUrl: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+    iconSize: [45, 45]
+});
+
+const iconeYellow = L.icon({
+    iconUrl: 'https://maps.google.com/mapfiles/ms/icons/yellow-dot.png',
+    iconSize: [32, 32]
+});
+
+// Igrejas com dias de culto
+const igrejas = [
+    { 
+        nome: "CCB - Monte das Oliveiras", 
+        lat: -2.9991, 
+        lng: -59.9964,
+        culto: "<br>Quinta 19:30h</br><br>Domingo 18:30h</br>"
+    },
+    { 
+        nome: "CCB - Manoa", 
+        lat: -3.0251, 
+        lng: -60.0015,
+        culto: "<br>Terça 19:30h</br><br>Sexta 19:30h</br>"
+    }
+];
+
+let minhaLocalizacao = null;
+let marcadorUsuario;
+let marcadores = [];
+
+// Distância (Haversine)
+function distancia(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI/180;
+    const dLon = (lon2 - lon1) * Math.PI/180;
+
+    const a = Math.sin(dLat/2)**2 +
+        Math.cos(lat1*Math.PI/180) *
+        Math.cos(lat2*Math.PI/180) *
+        Math.sin(dLon/2)**2;
+
+    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+}
+
+// Popup com rota
+function criarPopup(igreja) {
+    let link;
+
+    if (minhaLocalizacao) {
+        link = `https://www.google.com/maps/dir/?api=1&origin=${minhaLocalizacao.lat},${minhaLocalizacao.lng}&destination=${igreja.lat},${igreja.lng}`;
+    } else {
+        link = `https://www.google.com/maps/dir/?api=1&destination=${igreja.lat},${igreja.lng}`;
+    }
+
+    return `
+        <b>${igreja.nome}</b><br>
+        <a href="${link}" target="_blank" class="btn-rota">
+            🚗 Ir pelo Google Maps
+        </a>
+    `;
+}
+
+// Atualiza painel
+function atualizarPainel(igreja) {
+    document.getElementById("painelCulto").innerHTML =
+        `<b>📅 ${igreja.nome}</b><br>${igreja.culto}`;
+}
+
+// Adicionar igrejas
+function adicionarIgrejas() {
+
+    igrejas.forEach(igreja => {
+
+        const marker = L.marker([igreja.lat, igreja.lng], { icon: iconeAzul })
+            .addTo(map)
+            .bindPopup(criarPopup(igreja));
+
+        marker.on("click", () => {
+            atualizarPainel(igreja);
+        });
+
+        marcadores.push({ marker, igreja });
+    });
+}
+
+// Igreja mais próxima
+function igrejaMaisProxima() {
+
+    if (!minhaLocalizacao) return;
+
+    let menor = Infinity;
+    let maisProxima = null;
+
+    marcadores.forEach(item => {
+
+        const d = distancia(
+            minhaLocalizacao.lat,
+            minhaLocalizacao.lng,
+            item.igreja.lat,
+            item.igreja.lng
+        );
+
+        if (d < menor) {
+            menor = d;
+            maisProxima = item;
+        }
+
+        // volta ícone normal
+        item.marker.setIcon(iconeAzul);
+    });
+
+    if (maisProxima) {
+        maisProxima.marker.setIcon(iconeGrande);
+        maisProxima.marker.openPopup();
+        atualizarPainel(maisProxima.igreja);
+        map.setView(maisProxima.marker.getLatLng(), 15);
+    }
+}
+
+// Atualiza popups
+function atualizarPopups() {
+    marcadores.forEach(item => {
+        item.marker.setPopupContent(criarPopup(item.igreja));
+    });
+}
+
+// Geolocalização automática (mantida)
+function pegarLocalizacao() {
+
+    if (!navigator.geolocation) return;
+
+    navigator.geolocation.getCurrentPosition(pos => {
+
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+
+        minhaLocalizacao = { lat, lng };
+
+        if (marcadorUsuario) {
+            map.removeLayer(marcadorUsuario);
+        }
+
+        marcadorUsuario = L.marker([lat, lng], { icon: iconeYellow })
+            .addTo(map)
+            .bindPopup("📍 Você está aqui")
+            .openPopup();
+
+        map.setView([lat, lng], 14);
+
+        atualizarPopups();
+
+    });
+}
+
+// Inicialização
+adicionarIgrejas();
+pegarLocalizacao();
+
+</script>
+
+</body>
+</html>
